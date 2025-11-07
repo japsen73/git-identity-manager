@@ -190,6 +190,7 @@ Command options:
                       --name NAME - Name of the associated identity.
                     --email EMAIL - Email of the associated identity.
                     --key SSH_KEY - SSH private key of the associated identity.
+                                    Will prompt for SSH command options.
                     --signing-key SIGNING_KEY - (optional) add a gpg signing key.
                     --sign-commits SIGN_COMMITS (optional) whether or not to sign commits.
         --ssh-command SSH_COMMAND - Customize the SSH command ignoring --key.
@@ -314,7 +315,26 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             SSH_KEY="$2"
-            SSH_COMMAND="ssh -i $2 -o IdentitiesOnly=yes -F /dev/null"
+            
+            # Prompt user for SSH command preference
+            echo "Choose SSH command option for key $2:"
+            echo "1) ssh -i $2 -o IdentitiesOnly=yes  (uses SSH config) [default]"
+            echo "2) ssh -i $2 -o IdentitiesOnly=yes -F /dev/null  (ignores SSH config)"
+            echo -n "Enter choice (1 or 2, default 1): "
+            read -r choice
+            
+            case "$choice" in
+                1|"")
+                    SSH_COMMAND="ssh -i $2 -o IdentitiesOnly=yes"
+                    ;;
+                2)
+                    SSH_COMMAND="ssh -i $2 -o IdentitiesOnly=yes -F /dev/null"
+                    ;;
+                *)
+                    echo "ERROR: Invalid choice. Please enter 1 or 2." >&2
+                    exit 1
+                    ;;
+            esac
             shift 2
             ;;
         --ssh-command)
