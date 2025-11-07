@@ -135,11 +135,12 @@ Synopsis: git ${0##*/git-} COMMAND [ID] [OPTIONS]
 
 Example usage:
 
-    Basic commands for add, list, use, and remove.
+    Basic commands for add, list, use-global/use, and remove.
 
       git ${cmd} add jcool --name "Joe Cool" --email "joe@example.com" --key ~/.ssh/id_rsa
       git ${cmd} list
-      git ${cmd} use jcool
+      git ${cmd} use-global jcool     # Sets identity globally
+      git ${cmd} use jcool            # Sets identity locally in current repository
       git ${cmd} remove jcool
 
     Adding with a GPG key and signing each commit
@@ -175,7 +176,10 @@ Commands:
     uninstall - Removes all git idm data from global gitconfig.  All git idm
                 identities will be removed.  This will not affect settings not
                 related to git idm.
-          use - Actively use an identity for git authorship and publishing.
+   use-global - Actively use an identity for git authorship and publishing
+                globally.
+          use - Actively use an identity for git authorship and publishing
+                within the current repository only (local configuration).
       version - Output version information.
 
 Command options:
@@ -198,8 +202,11 @@ Command options:
                ID - Identity which will be used to track.
         --tracked - List directories tracked by an identity for autoswitching
                     authorship.
+    use-global:
+        ID - Identity to activate globally.
     use:
-        ID - Identity to activate.
+        ID - Identity to activate in the current repository only (sets local
+             git config). Must be run from within a git repository.
     remove:
         ID - Remove the identity.  If ID is "all" then all identities will be
              removed.
@@ -412,7 +419,7 @@ EOF
                 DISCREPENCY=true
             fi
             if [ "${DISCREPENCY}" = true ]; then
-                echo "ERROR: found above discrepencies with identity.  To fix run 'git idm use ${ACTIVE_ID}'." >&2
+                echo "ERROR: found above discrepencies with identity.  To fix run 'git idm use-global ${ACTIVE_ID}' or 'git idm use ${ACTIVE_ID}'." >&2
                 exit 1
             fi
             no_ssh_key_warning "${ACTIVE_ID}"
@@ -518,7 +525,7 @@ EOF
         echo 'To complete uninstallation run the following command:' >&2
         echo "    rm \"$0\"" >&2
         ;;
-    use)
+    use-global)
         if ! identity_exists; then
             echo "ERROR: Identity ${id} does not exist.  See 'git idm list' or 'git idm help'." >&2
             exit 1
@@ -543,6 +550,46 @@ EOF
           check_ssh_agent "${SSH_KEY}"
         fi
         add_identity_file "${id}"
+        no_ssh_key_warning "${id}"
+        ;;
+    use)
+        if ! identity_exists; then
+            echo "ERROR: Identity ${id} does not exist.  See 'git idm list' or 'git idm help'." >&2
+            exit 1
+        fi
+        # Check if we're in a git repository
+        if ! git rev-parse --git-dir > /dev/null 2>&1; then
+            echo "ERROR: Not in a git repository. The 'use' command must be run from within a git repository." >&2
+            exit 1
+        fi
+        initial_setup
+        NAME="$(git config --global --get gitidm."${id}".name)"
+        EMAIL="$(git config --global --get gitidm."${id}".email)"
+        SSH_COMMAND="$(git config --global --get gitidm."${id}".sshCommand)"
+        SIGNING_KEY="$(git config --global --get gitidm."${id}".signingKey)"
+        SIGN_COMMITS="$(git config --global --get gitidm."${id}".signCommits)"
+        
+        if [ -n "${NAME}" ]; then
+            run_command git config user.name "${NAME}"
+        fi
+        if [ -n "${EMAIL}" ]; then
+            run_command git config user.email "${EMAIL}"
+        fi
+        if [ -n "${SSH_COMMAND}" ]; then
+            run_command git config core.sshCommand "${SSH_COMMAND}"
+        fi
+        if [ -n "${SIGNING_KEY}" ]; then
+            run_command git config user.signingkey "${SIGNING_KEY}"
+        fi
+        if [ -n "${SIGN_COMMITS}" ]; then
+            run_command git config commit.gpgsign "${SIGN_COMMITS}"
+        fi
+        run_command git config user.activeidm "${id}"
+        
+        SSH_KEY="$(git config --global --get gitidm."${id}".sshKey)"
+        if [ -n "${SSH_KEY}" ]; then
+          check_ssh_agent "${SSH_KEY}"
+        fi
         no_ssh_key_warning "${id}"
         ;;
     version)
